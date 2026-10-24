@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>홀짝 게임</title>
+  <style>
+    body { font-family: "Malgun Gothic", sans-serif; max-width: 600px; margin: 30px auto; }
+    button { font-size: 16px; padding: 8px 16px; margin: 4px; }
+    .pick { font-size: 24px; width: 120px; }
+    #result { font-size: 28px; color: #1f4e9a; }
+  </style>
+</head>
+<body>
+  <h1>🎲 홀짝 게임</h1>
+  <p>0.001 ETH를 걸고 홀/짝을 고르세요. 컨트랙트가 1~100 숫자를 뽑고, 맞추면 0.002 ETH!</p>
+
+  <button id="connectBtn">MetaMask 연결</button>
+  <p>계정: <span id="account">-</span></p>
+  <p>내 잔액: <span id="myBalance">-</span> / 게임 상금 준비금: <span id="pool">-</span></p>
+
+  <button id="oddBtn" class="pick" disabled>홀</button>
+  <button id="evenBtn" class="pick" disabled>짝</button>
+  <p id="result"></p>
+  <p id="status"></p>
+
+  <h3>최근 게임</h3>
+  <ul id="history"></ul>
+
+  <script type="module">
+    import { ethers } from "/node_modules/ethers/dist/ethers.min.js";
+
+    const abi = [
+      "function play(bool pickOdd) payable",
+      "function BET() view returns (uint256)",
+      "event Played(address indexed player, bool pickOdd, uint256 number, bool win)"
+    ];
+
+    let provider, signer, game;
+    const $ = (id) => document.getElementById(id);
+    const eth = (wei) => ethers.formatEther(wei) + " ETH";
+
+    $("connectBtn").onclick = async () => {
+      try {
+        provider = new ethers.BrowserProvider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        signer = await provider.getSigner();
+        const { chainId } = await provider.getNetwork();
+        const res = await fetch(`/ignition/deployments/chain-${chainId}/deployed_addresses.json`);
+        if (!res.ok) throw new Error(`chain ${chainId} 에 배포 기록이 없습니다 (MetaMask 네트워크 확인)`);
+        const address = (await res.json())["OddEvenModule#OddEven"];
+        if (!address) throw new Error("OddEven 이 배포되지 않았습니다");
+        game = new ethers.Contract(address, abi, signer);
+
+        $("account").textContent = signer.address;
+        $("connectBtn").disabled = true;
+        $("oddBtn").disabled = $("evenBtn").disabled = false;
+        await refresh();
+      } catch (e) {
+        $("status").textContent = e.shortMessage ?? e.message;
+      }
+    };
+
+    $("oddBtn").onclick = () => play(true);
+    $("evenBtn").onclick = () => play(false);
+
+    async function play(pickOdd) {
+      try {
+        $("result").textContent = "";
+        $("status").textContent = "MetaMask에서 확인해 주세요";
+        // payable 함수: { value } 로 ETH 를 함께 보냄
+        const value = await game.BET();
+        // ① 가스 예상: 실패할 거래(금액 틀림, 상금 부족)는 여기서 이유와 함께 멈춤 → 보내지 않음
+        const gas = await game.play.estimateGas(pickOdd, { value });
+        // ② 승패는 블록에 담길 때 정해짐 → 예상이 '졌을 때'로 나오면 이겼을 때 가스가 모자람 → 여유 20000
+        const tx = await game.play(pickOdd, { value, gasLimit: gas + 20000n });
+        $("status").textContent = "블록에 담기기를 기다리는 중…";
+        const receipt = await tx.wait();
+
+        // receipt.logs 에서 Played 이벤트 찾기 → 뽑힌 숫자, 승패
+        const ev = receipt.logs.map((log) => game.interface.parseLog(log)).find((p) => p?.name === "Played");
+        const { number, win } = ev.args;
+        $("result").textContent = `뽑힌 숫자: ${number} (${number % 2n === 1n ? "홀" : "짝"})`;
+        $("status").textContent = win ? "🎉 이겼습니다! 0.002 ETH를 받았습니다" : "❌ 졌습니다";
+      } catch (e) {
+        $("status").textContent = e.code === "ACTION_REJECTED" ? "MetaMask에서 거절함" : (e.reason ?? e.shortMessage ?? e.message);
+      }
+      await refresh();
+    }
+
+    async function refresh() {
+      $("myBalance").textContent = eth(await provider.getBalance(signer.address));
+      $("pool").textContent = eth(await provider.getBalance(await game.getAddress()));
+
+      // 최근 5000 블록의 Played 이벤트 (가스비 X)
+      const latest = await provider.getBlockNumber();
+      const logs = await game.queryFilter(game.filters.Played(), Math.max(0, latest - 5000));
+      $("history").innerHTML = logs.reverse().slice(0, 10).map((l) =>
+        `<li>${l.args.player.slice(0, 6)}… ${l.args.pickOdd ? "홀" : "짝"} → ${l.args.number} ${l.args.win ? "🎉" : "❌"}</li>`
+      ).join("");
+    }
+  </script>
+</body>
+</html>

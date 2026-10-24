@@ -20,7 +20,8 @@ npm ci
 | `contracts/OddEven.sol`, `ignition/modules/OddEven.ts` | 홀짝 게임 (준비금 0.005 ETH 와 함께 배포) | 제공 (읽고 이해) |
 | `contracts/Ballot.sol`, `ignition/modules/Ballot.ts` | 투표: Solidity 공식 문서 예제 + `register()` | 제공 (읽고 이해, 후보 바꿔 보기) |
 | `scripts/serve.js` | 웹 서버 `http://localhost:3000` | 수정하지 않음 |
-| `web/odd-even.html`, `web/ballot.html` | 웹 페이지 | **작성** |
+| `web/odd-even.html`, `web/ballot.html` | 웹 페이지 | 제공 (읽고 실행) |
+| 변화 예제 | 컨트랙트와 웹 페이지를 직접 고치기 (강의자료 참고) | **작성** |
 
 ## 명령
 | 하는 일 | 명령 | 짧은 명령 |
