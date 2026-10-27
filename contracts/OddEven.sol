@@ -17,17 +17,17 @@ contract OddEven {
         require(msg.value == BET, "send 0.001 ETH");
         require(address(this).balance >= 2 * BET, "not enough prize money");
 
-        // 블록 정보로 만든 "가짜 랜덤" → 예측할 수 있음 (생각해 보기)
+        // 블록 시간으로 만든 "가짜 랜덤" → 누구나 아는 값이라 예측할 수 있음 (생각해 보기)
         uint256 number = uint256(
-            keccak256(abi.encodePacked(block.prevrandao, block.timestamp, msg.sender))
+            keccak256(abi.encodePacked(block.timestamp, msg.sender))
         ) % 100 + 1;
         bool win = (number % 2 == 1) == pickOdd;
         emit Played(msg.sender, pickOdd, number, win);
 
-        if (win) {
-            (bool ok, ) = payable(msg.sender).call{value: 2 * BET}("");
-            require(ok, "transfer failed");
-        }
+        uint256 prize = 2 * BET;
+        if (!win) prize = 1;   // 지면 1 wei: 이기든 지든 송금 → 가스량이 거의 같음 (가스 예상이 맞음)
+        (bool ok, ) = payable(msg.sender).call{value: prize}("");
+        require(ok, "transfer failed");
     }
 
     function withdraw() external {
