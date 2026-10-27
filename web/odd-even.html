@@ -33,12 +33,15 @@
   <h3>최근 게임</h3>
   <ul id="history"></ul>
 
+  <p>배포한 계정만: <button id="withdrawBtn" disabled>남은 준비금 회수</button></p>
+
   <script type="module">
     import { ethers } from "/node_modules/ethers/dist/ethers.min.js";
 
     const abi = [
       "function play(bool pickOdd) payable",
       "function BET() view returns (uint256)",
+      "function withdraw()",
       "event Played(address indexed player, bool pickOdd, uint256 number, bool win)"
     ];
 
@@ -71,6 +74,7 @@
         $("account").textContent = signer.address;
         $("connectBtn").disabled = true;
         $("oddBtn").disabled = $("evenBtn").disabled = false;
+        $("withdrawBtn").disabled = false;
         $("status").textContent = "";   // 이전 오류 문구 지우기
         await refresh();
       } catch (e) {
@@ -102,6 +106,20 @@
       }
       await refresh();
     }
+
+    // 남은 준비금 회수: 배포한 계정(owner)만 가능 → 다른 계정이면 미리 실행에서 "only owner" 로 멈춤, 보내지 않음
+    $("withdrawBtn").onclick = async () => {
+      try {
+        $("status").textContent = "MetaMask에서 확인해 주세요";
+        const tx = await game.withdraw();
+        $("status").textContent = "블록에 담기기를 기다리는 중…";
+        await tx.wait();
+        $("status").textContent = "남은 준비금을 회수했습니다";
+      } catch (e) {
+        $("status").textContent = e.code === "ACTION_REJECTED" ? "MetaMask에서 거절함" : (e.reason ?? e.shortMessage ?? e.message);
+      }
+      await refresh();
+    };
 
     async function refresh() {
       $("myBalance").textContent = eth(await provider.getBalance(signer.address));
